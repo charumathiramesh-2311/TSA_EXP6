@@ -25,81 +25,44 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
 from sklearn.preprocessing import MinMaxScaler
-from sklearn.metrics import mean_absolute_error, mean_squared_error
-from statsmodels.tsa.seasonal import seasonal_decompose
+from sklearn.metrics import mean_squared_error
 import numpy as np
 
-# Load the IoT temperature dataset
-data = pd.read_excel('/path/to/IOT-temp.xls') 
-
-print(data.head()) 
-
-# Assuming the second column is temperature readings, and first column is datetime
-data.columns = ['Date', 'Temperature'] 
-
-data['Date'] = pd.to_datetime(data['Date'])  
-data.set_index('Date', inplace=True)
-
-# Resample to monthly data
-data_monthly = data.resample('MS').mean() 
-print(data_monthly.head())
-
-# Plot original monthly resampled data
-data_monthly.plot(title='Monthly Resampled IoT Temperature Data')
-plt.show()
+# Load and prepare data
+iot_data = pd.read_csv('IOT-temp.csv')
+iot_data['noted_date'] = pd.to_datetime(iot_data['noted_date'], format='%d-%m-%Y %H:%M')
+iot_data.set_index('noted_date', inplace=True)
+monthly_temp = iot_data['temp'].resample('MS').mean()
 
 # Scale the data
 scaler = MinMaxScaler()
-scaled_data = pd.Series(scaler.fit_transform(data_monthly.values.reshape(-1, 1)).flatten(), 
-                        index=data_monthly.index)
+scaled_temp = pd.Series(scaler.fit_transform(monthly_temp.values.reshape(-1, 1)).flatten(), index=monthly_temp.index)
+scaled_temp += 1  # for multiplicative seasonality
 
-# Plot scaled data
-scaled_data.plot(title='Scaled Monthly IoT Temperature Data')
+# Split into training and testing sets
+train_size = int(len(scaled_temp) * 0.8)
+train_data = scaled_temp[:train_size]
+test_data = scaled_temp[train_size:]
+
+# Fit Holt-Winters model
+model = ExponentialSmoothing(train_data, trend='add').fit()
+forecast = model.forecast(len(test_data))
+
+
+# Plot
+plt.figure(figsize=(10, 6))
+train_data.plot(label='Train')
+test_data.plot(label='Test')
+forecast.plot(label='Forecast')
+plt.legend()
+plt.title('Holt-Winters Forecast vs Actual')
+plt.grid(True)
 plt.show()
 
-# Decomposition to check trend and seasonality
-decomposition = seasonal_decompose(data_monthly, model="additive")
-decomposition.plot()
-plt.show()
+# RMSE
+rmse = np.sqrt(mean_squared_error(test_data, forecast))
+print("RMSE:", rmse)
 
-# Handle non-positive values for multiplicative seasonality
-scaled_data = scaled_data + 1
-
-# Split into training and testing
-train_data = scaled_data[:int(len(scaled_data) * 0.8)]
-test_data = scaled_data[int(len(scaled_data) * 0.8):]
-
-# Build Holt-Winters model (additive trend, multiplicative seasonality)
-model_add = ExponentialSmoothing(train_data, trend='add', seasonal='mul', seasonal_periods=12).fit()
-
-# Forecast on test data
-test_predictions_add = model_add.forecast(steps=len(test_data))
-
-# Plot the results
-ax = train_data.plot(label='Train Data')
-test_data.plot(ax=ax, label='Test Data')
-test_predictions_add.plot(ax=ax, label='Predictions')
-ax.legend()
-ax.set_title('Holt-Winters Model Prediction on Test Data')
-plt.show()
-
-# Model performance
-rmse = np.sqrt(mean_squared_error(test_data, test_predictions_add))
-print(f'RMSE on test data: {rmse:.4f}')
-
-print(f"Standard Deviation: {np.sqrt(scaled_data.var()):.4f}")
-print(f"Mean: {scaled_data.mean():.4f}")
-
-# Train final model on all data and predict future
-final_model = ExponentialSmoothing(scaled_data, trend='add', seasonal='mul', seasonal_periods=12).fit()
-final_predictions = final_model.forecast(steps=int(len(data_monthly)/4)) 
-
-# Plot final prediction
-ax = scaled_data.plot(label='Scaled Data')
-final_predictions.plot(ax=ax, label='Future Predictions')
-ax.legend()
-ax.set_title('Final Prediction using Holt-Winters')
-plt.show()
 
 
 
@@ -108,11 +71,15 @@ plt.show()
 
 
 TEST_PREDICTION
+![image](https://github.com/user-attachments/assets/41ed737d-2f04-4a5c-9f5f-a14de535c172)
 
-![image](https://github.com/user-attachments/assets/160c753d-eba0-42f2-95c3-1df6a6a7cfbd)
 
 
 FINAL_PREDICTION
+
+![image](https://github.com/user-attachments/assets/039b2922-8ab7-4f2e-a320-2f18e415e6de)
+
+
 
 ### RESULT:
 Thus the program run successfully based on the Holt Winters Method model.
